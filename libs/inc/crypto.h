@@ -69,27 +69,25 @@ int hash(void *data, size_t len, uint8_t *hash_out);
  *
  * @param data A pointer to a buffer of length len containing the data
  *          to be hashed
- * @param d_size The size of the data
- * @param secret A pointer to the secret
- * @param s_size The size of the secret
+ * @param size The size of the data
+ * @param secret A pointer to the 16 byte secret
  * @param dest A pointer to a buffer of length HASH_SIZE (16 bytes) where the resulting
  *          hash output will be written to
  *
  * @return 0 on success, non-zero for other error
  */
-int create_sig(uint8_t* data, size_t d_size, uint8_t* secret, size_t s_size, uint8_t* dest);
+int create_signature(uint8_t* data, size_t size, uint8_t* secret, uint8_t* dest);
 
 /** @brief Verifies a signature of arbitrary-length data
  *
  * @param data A pointer to a buffer of length len containing the data
- * @param d_size The size of the data
- * @param secret A pointer to the secret
- * @param s_size The size of the secret
+ * @param size The size of the data
+ * @param secret A pointer to the 16 byte secret
  * @param sig A pointer to the signature of the message
  *
  * @return 0 if the data is authentic, -1 if the data has been altered
  */
-int verify_sig(uint8_t* data, size_t d_size, uint8_t* secret, size_t s_size, uint8_t* sig);
+int verify_signature(uint8_t* data, size_t size, uint8_t* secret, uint8_t* sig);
 
 /** @brief Creates a true random number
  *

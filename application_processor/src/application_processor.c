@@ -126,7 +126,7 @@ int secure_send(uint8_t address, uint8_t *buffer, uint8_t len) {
     uint8_t *msg = malloc(size_m);
 
     // create signature and place at start of msg
-    create_sig(buffer, len, SECRET, sizeof(SECRET), msg);
+    create_signature(buffer, len, SECRET, msg);
 
     // copy data to msg behind the signature
     memcpy(msg + 16, buffer, len);
@@ -166,7 +166,7 @@ int secure_receive(i2c_addr_t address, uint8_t *buffer) {
     int size_d = size_r - 16;
 
     // return error if signature is does not match
-    if (verify_sig(data, size_d, SECRET, sizeof(SECRET), sig))
+    if (verify_signature(data, size_d, SECRET, sig))
         return -1;
 
     // copy the data into message buffer
@@ -280,42 +280,46 @@ int scan_components() {
     return SUCCESS_RETURN;
 }
 
+int verify_component(uint8_t addr) {
+    // Allocate space for message (1 byte command + 16 byte nonce)
+    // and recieved message (16 byte challenge)
+    uint8_t transmit_buf[17];
+    uint8_t recieve_buf[16];
+
+    // Create command message
+    transmit_buf[0] = COMPONENT_CMD_VALIDATE;
+
+    // Create 16 byte nonce and the ptr to it
+    uint8_t *nonce = transmit_buf + 1;
+    trng(nonce, 16);
+
+    // Send out command
+    int len = send_packet(addr, 17, transmit_buf);
+    if (len == ERROR_RETURN) return ERROR_RETURN;
+
+    // Recieve challenge
+    len = poll_and_receive_packet(addr, recieve_buf);
+    if (len != 16) return ERROR_RETURN;
+
+    // Check that the challenge is correct
+    if (verify_signature(nonce, 16, SECRET, recieve_buf)) {
+        print_error("Challenge mismatch\n");
+        return ERROR_RETURN;
+    }
+
+    return SUCCESS_RETURN;
+}
+
 int validate_components() {
-
-    // Buffers for board link communication
-    uint8_t receive_buffer[MAX_I2C_MESSAGE_LEN];
-    uint8_t transmit_buffer[MAX_I2C_MESSAGE_LEN];
-
-    // Send validate command to each component
+    // Veryify each component
     for (unsigned i = 0; i < flash_status.component_cnt; i++) {
         // Set the I2C address of the component
         i2c_addr_t addr =
             component_id_to_i2c_addr(flash_status.component_ids[i]);
 
-        // Create command message
-        transmit_buffer[0] = COMPONENT_CMD_VALIDATE;
-
-        // Create 16 byte nonce
-        uint8_t *nonce = transmit_buffer + 1;
-        trng(nonce, 16);
-
-        // Send out command and receive result
-        // Validate message size (op code + 16 byte nonce)
-        int len = send_packet(addr, 17, transmit_buffer);
-        if (len == ERROR_RETURN) {
-            print_error("Could not validate component (Send)\n");
-            return ERROR_RETURN;
-        }
-
-        len = poll_and_receive_packet(addr, receive_buffer);
-        if (len != 16) {
-            print_error("Could not validate component (Recieve)\n");
-            return ERROR_RETURN;
-        }
-
-        // Check that the sig is correct
-        if (verify_sig(nonce, 16, SECRET, sizeof(SECRET), receive_buffer)) {
-            print_error("Could not validate component (Sig)\n");
+        // Verify component
+        if (verify_component(addr) == ERROR_RETURN) {
+            print_error("Could not validate component\n");
             return ERROR_RETURN;
         }
     }
@@ -344,7 +348,7 @@ int boot_components() {
         }
 
         // Create sig (challenge) from recieved 16 byte nonce
-        create_sig(receive_buffer, 16, SECRET, sizeof(SECRET), transmit_buffer);
+        create_signature(receive_buffer, 16, SECRET, transmit_buffer);
         send_packet(addr, 16, transmit_buffer);
 
         // Recieve boot message
@@ -379,6 +383,10 @@ int attest_component(uint32_t component_id) {
         print_error("Could not attest component\n");
         return ERROR_RETURN;
     }
+
+    decrypt_sym(receive_buffer, len, SECRET, receive_buffer);
+
+    print_hex_info(receive_buffer, len);
 
     // Print out attestation data
     print_info("C>0x%08x\n", component_id);
@@ -467,12 +475,12 @@ int validate_token() {
 
 // Boot the components and board if the components validate
 void attempt_boot() {
-    if (validate_components()) {
+    if (validate_components() == ERROR_RETURN) {
         print_error("Components could not be validated\n");
         return;
     }
     print_debug("All Components validated\n");
-    if (boot_components()) {
+    if (boot_components() == ERROR_RETURN) {
         print_error("Failed to boot all components\n");
         return;
     }

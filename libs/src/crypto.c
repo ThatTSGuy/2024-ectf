@@ -114,45 +114,23 @@ int hash(void *data, size_t len, uint8_t *hash_out) {
     return wc_Md5Hash((uint8_t *)data, len, hash_out);
 }
 
-/** @brief Creates a signature of arbitrary-length data
- *
- * @param data A pointer to a buffer of length len containing the data
- *          to be hashed
- * @param d_size The size of the data
- * @param secret A pointer to the secret
- * @param s_size The size of the secret
- * @param dest A pointer to a buffer of length HASH_SIZE (16 bytes) where the resulting
- *          hash output will be written to
- *
- * @return 0 on success, non-zero for other error
- */
-int create_sig(uint8_t* data, size_t d_size, uint8_t* secret, size_t s_size, uint8_t* dest)
+int create_signature(uint8_t* data, size_t size, uint8_t* secret, uint8_t* dest)
 {
     Md5 md5;
     wc_InitMd5(&md5);
 
-    wc_Md5Update(&md5, data, d_size);
-    wc_Md5Update(&md5, secret, s_size);
+    wc_Md5Update(&md5, data, size);
+    wc_Md5Update(&md5, secret, 16);
 
     wc_Md5Final(&md5, dest);
 }
 
-/** @brief Verifies a signature of arbitrary-length data
- *
- * @param data A pointer to a buffer of length len containing the data
- * @param d_size The size of the data
- * @param secret A pointer to the secret
- * @param s_size The size of the secret
- * @param sig A pointer to the signature of the message
- *
- * @return 0 if the data is authentic, non-zero if the data has been altered
- */
-int verify_sig(uint8_t* data, size_t d_size, uint8_t* secret, size_t s_size, uint8_t* sig)
+int verify_signature(uint8_t* data, size_t size, uint8_t* secret, uint8_t* signature)
 {
-    uint8_t self_sig[16];
-    create_sig(data, d_size, secret, s_size, self_sig);
+    uint8_t self_signature[16];
+    create_signature(data, size, secret, self_signature);
 
-    return memcmp(sig, self_sig, 16);
+    return memcmp(signature, self_signature, 16);
 }
 
 /** @brief Creates a true random number

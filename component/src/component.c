@@ -1,12 +1,13 @@
 /**
  * @file component.c
- * @author Jacob Doll 
+ * @author Jacob Doll
  * @brief eCTF Component Example Design Implementation
  * @date 2024
  *
- * This source file is part of an example system for MITRE's 2024 Embedded System CTF (eCTF).
- * This code is being provided only for educational purposes for the 2024 MITRE eCTF competition,
- * and may not meet MITRE standards for quality. Use this code at your own risk!
+ * This source file is part of an example system for MITRE's 2024 Embedded
+ * System CTF (eCTF). This code is being provided only for educational purposes
+ * for the 2024 MITRE eCTF competition, and may not meet MITRE standards for
+ * quality. Use this code at your own risk!
  *
  * @copyright Copyright (c) 2024 The MITRE Corporation
  */
@@ -18,13 +19,13 @@
 #include "mxc_errors.h"
 #include "nvic_table.h"
 #include <stdbool.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <string.h>
-#include <stdint.h>
 
-#include "simple_i2c_peripheral.h"
 #include "board_link.h"
 #include "crypto.h"
+#include "simple_i2c_peripheral.h"
 
 // Includes from containerized build
 #include "ectf_params.h"
@@ -49,7 +50,8 @@
 #define ATTESTATION_CUSTOMER "Fritz"
 */
 
-/******************************** TYPE DEFINITIONS ********************************/
+/******************************** TYPE DEFINITIONS
+ * ********************************/
 // Commands received by Component using 32 bit integer
 typedef enum {
     COMPONENT_CMD_NONE,
@@ -59,11 +61,12 @@ typedef enum {
     COMPONENT_CMD_ATTEST
 } component_cmd_t;
 
-/******************************** TYPE DEFINITIONS ********************************/
+/******************************** TYPE DEFINITIONS
+ * ********************************/
 // Data structure for receiving messages from the AP
 typedef struct {
     uint8_t opcode;
-    uint8_t params[MAX_I2C_MESSAGE_LEN-1];
+    uint8_t params[MAX_I2C_MESSAGE_LEN - 1];
 } command_message;
 
 typedef struct {
@@ -74,7 +77,8 @@ typedef struct {
     uint32_t component_id;
 } scan_message;
 
-/********************************* FUNCTION DECLARATIONS **********************************/
+/********************************* FUNCTION DECLARATIONS
+ * **********************************/
 // Core function definitions
 void component_process_cmd(void);
 void process_boot(void);
@@ -82,30 +86,33 @@ void process_scan(void);
 void process_validate(void);
 void process_attest(void);
 
-/********************************* GLOBAL VARIABLES **********************************/
+/********************************* GLOBAL VARIABLES
+ * **********************************/
 // Global varaibles
 uint8_t receive_buffer[MAX_I2C_MESSAGE_LEN];
 uint8_t transmit_buffer[MAX_I2C_MESSAGE_LEN];
 
-/******************************* POST BOOT FUNCTIONALITY *********************************/
+/******************************* POST BOOT FUNCTIONALITY
+ * *********************************/
 /**
- * @brief Secure Send 
- * 
+ * @brief Secure Send
+ *
  * @param buffer: uint8_t*, pointer to data to be send
- * @param len: uint8_t, size of data to be sent 
- * 
- * Securely send data over I2C. This function is utilized in POST_BOOT functionality.
- * This function must be implemented by your team to align with the security requirements.
-*/
-void secure_send(uint8_t* buffer, uint8_t len) {
+ * @param len: uint8_t, size of data to be sent
+ *
+ * Securely send data over I2C. This function is utilized in POST_BOOT
+ * functionality. This function must be implemented by your team to align with
+ * the security requirements.
+ */
+void secure_send(uint8_t *buffer, uint8_t len) {
     // size of secure message (md5 digest size + data size)
     int size_m = 16 + len;
 
     // allocate space for secure message
-    uint8_t* msg = malloc(size_m);
+    uint8_t *msg = malloc(size_m);
 
     // create signature and place at start of msg
-    create_sig(buffer, len, SECRET, sizeof(SECRET), msg);
+    create_signature(buffer, len, SECRET, sizeof(SECRET), msg);
 
     // copy data to msg behind the signature
     memcpy(msg + 16, buffer, len);
@@ -116,15 +123,16 @@ void secure_send(uint8_t* buffer, uint8_t len) {
 
 /**
  * @brief Secure Receive
- * 
+ *
  * @param buffer: uint8_t*, pointer to buffer to receive data to
- * 
+ *
  * @return int: number of bytes received, negative if error
- * 
- * Securely receive data over I2C. This function is utilized in POST_BOOT functionality.
- * This function must be implemented by your team to align with the security requirements.
-*/
-int secure_receive(uint8_t* buffer) {
+ *
+ * Securely receive data over I2C. This function is utilized in POST_BOOT
+ * functionality. This function must be implemented by your team to align with
+ * the security requirements.
+ */
+int secure_receive(uint8_t *buffer) {
     // buffer to hold recieved secure message
     uint8_t recieved[MAX_I2C_MESSAGE_LEN];
 
@@ -132,17 +140,18 @@ int secure_receive(uint8_t* buffer) {
     int size_r = wait_and_receive_packet(recieved);
 
     // poll_and_receive_packet returns error or the message is too small
-    if (size_r < 16) return -1;
+    if (size_r < 16)
+        return -1;
 
     // pointer offsets
-    uint8_t* sig = recieved;
-    uint8_t* data = recieved + 16;
+    uint8_t *sig = recieved;
+    uint8_t *data = recieved + 16;
 
     // calculate size of data (recieved size - md5 digest size)
     int size_d = size_r - 16;
 
     // return error if signature is does not match
-    if (verify_sig(data, size_d, SECRET, sizeof(SECRET), sig))
+    if (verify_signature(data, size_d, SECRET, sizeof(SECRET), sig))
         return -1;
 
     // copy the data into message buffer
@@ -152,17 +161,18 @@ int secure_receive(uint8_t* buffer) {
     return size_d;
 }
 
-/******************************* FUNCTION DEFINITIONS *********************************/
+/******************************* FUNCTION DEFINITIONS
+ * *********************************/
 
 // Example boot sequence
 // Your design does not need to change this
 void boot() {
 
-    // POST BOOT FUNCTIONALITY
-    // DO NOT REMOVE IN YOUR DESIGN
-    #ifdef POST_BOOT
-        POST_BOOT
-    #else
+// POST BOOT FUNCTIONALITY
+// DO NOT REMOVE IN YOUR DESIGN
+#ifdef POST_BOOT
+    POST_BOOT
+#else
     // Anything after this macro can be changed by your design
     // but will not be run on provisioned systems
     LED_Off(LED1);
@@ -186,18 +196,17 @@ void boot() {
 
     // Echo loop
     char buf[MAX_I2C_MESSAGE_LEN];
-    while (1)
-    {
+    while (1) {
         int len = secure_receive(buf);
         secure_send(buf, len);
     }
 
-    #endif
+#endif
 }
 
 // Handle a transaction from the AP
 void component_process_cmd() {
-    command_message* command = (command_message*) receive_buffer;
+    command_message *command = (command_message *)receive_buffer;
 
     // Output to application processor dependent on command received
     switch (command->opcode) {
@@ -231,13 +240,14 @@ void process_boot() {
 
     // Recieve sig from AP
     int len = wait_and_receive_packet(receive_buffer);
-    if (len != 16) return;
+    if (len != 16)
+        return;
 
-    if (verify_sig(transmit_buffer, 16, SECRET, sizeof(SECRET), receive_buffer))
+    if (verify_signature(transmit_buffer, 16, SECRET, sizeof(SECRET), receive_buffer))
         return;
 
     len = strlen(COMPONENT_BOOT_MSG) + 1;
-    memcpy((void*)transmit_buffer, COMPONENT_BOOT_MSG, len);
+    memcpy((void *)transmit_buffer, COMPONENT_BOOT_MSG, len);
     send_packet_and_ack(len, transmit_buffer);
 
     // Call the boot function
@@ -246,22 +256,38 @@ void process_boot() {
 
 void process_scan() {
     // The AP requested a scan. Respond with the Component ID
-    scan_message* packet = (scan_message*) transmit_buffer;
+    scan_message *packet = (scan_message *)transmit_buffer;
     packet->component_id = COMPONENT_ID;
     send_packet_and_ack(sizeof(scan_message), transmit_buffer);
 }
 
 void process_validate() {
     // The AP requested a validation. Respond with the sig from recieved nonce
-    uint8_t* nonce = receive_buffer + 1;
-    create_sig(nonce, 16, SECRET, sizeof(SECRET), transmit_buffer);
+    uint8_t *nonce = receive_buffer + 1;
+    create_signature(nonce, 16, SECRET, sizeof(SECRET), transmit_buffer);
     send_packet_and_ack(16, transmit_buffer);
 }
 
 void process_attest() {
-    // The AP requested attestation. Respond with the attestation data
-    uint8_t len = sprintf((char*)transmit_buffer, "LOC>%s\nDATE>%s\nCUST>%s\n",
-                ATTESTATION_LOC, ATTESTATION_DATE, ATTESTATION_CUSTOMER) + 1;
+    uint8_t attest_str[MAX_I2C_MESSAGE_LEN];
+
+    // Format attestation data
+    int len = sprintf(attest_str, "LOC>%s\nDATE>%s\nCUST>%s\n", ATTESTATION_LOC,
+                      ATTESTATION_DATE, ATTESTATION_CUSTOMER) +
+              1;
+
+    // Calculate padding size
+    int pad = 16 - len % 16;
+    if (pad) {
+        // Pad with zeros
+        memset(transmit_buffer + len, 0, pad);
+
+        // Add padding to total length
+        len += pad;
+    }
+
+    encrypt_sym(attest_str, len, SECRET, transmit_buffer);
+
     send_packet_and_ack(len, transmit_buffer);
 }
 
@@ -269,14 +295,14 @@ void process_attest() {
 
 int main(void) {
     printf("Component Started\n");
-    
+
     // Enable Global Interrupts
     __enable_irq();
-    
+
     // Initialize Component
     i2c_addr_t addr = component_id_to_i2c_addr(COMPONENT_ID);
     board_link_init(addr);
-    
+
     LED_On(LED2);
 
     while (1) {
