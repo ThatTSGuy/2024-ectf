@@ -53,8 +53,7 @@
 */
 
 // Flash Macros
-#define FLASH_ADDR                                                             \
-    ((MXC_FLASH_MEM_BASE + MXC_FLASH_MEM_SIZE) - (1 * MXC_FLASH_PAGE_SIZE))
+#define FLASH_ADDR ((MXC_FLASH_MEM_BASE + MXC_FLASH_MEM_SIZE) - (2 * MXC_FLASH_PAGE_SIZE))
 #define FLASH_MAGIC 0xDEADBEEF
 
 // Library call return types
@@ -256,7 +255,7 @@ int scan_components() {
     uint8_t transmit_buffer[MAX_I2C_MESSAGE_LEN];
 
     // Scan scan command to each component
-    for (i2c_addr_t addr = 0x8; addr < 0x7F; addr++) {
+    for (i2c_addr_t addr = 0x8; addr < 0x78; addr++) {
         // I2C Blacklist - 0x36 conflicts with separate device on MAX78000FTHR
         if (addr == 0x36) {
             continue;
@@ -355,7 +354,7 @@ int boot_components() {
         }
 
         // Print boot message from component
-        print_info("0x%x>%s\n", flash_status.component_ids[i], receive_buffer);
+        print_info("0x%08x>%s\n", flash_status.component_ids[i], receive_buffer);
     }
     return SUCCESS_RETURN;
 }
@@ -531,8 +530,9 @@ void attempt_attest() {
     uint32_t component_id;
     recv_input("Component ID: ", buf);
     sscanf(buf, "%x", &component_id);
-    attest_component(component_id);
-    print_success("Attest\n");
+    if(attest_component(component_id) == SUCCESS_RETURN) {
+        print_success("Attest\n");
+    }
 }
 
 /*********************************** MAIN *************************************/
