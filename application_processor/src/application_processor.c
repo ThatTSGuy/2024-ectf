@@ -386,8 +386,6 @@ int attest_component(uint32_t component_id) {
 
     decrypt_sym(receive_buffer, len, SECRET, receive_buffer);
 
-    print_hex_info(receive_buffer, len);
-
     // Print out attestation data
     print_info("C>0x%08x\n", component_id);
     print_info("%s", receive_buffer);
