@@ -20,15 +20,15 @@
 #include "mxc_device.h"
 #include "nvic_table.h"
 
-#include <stdlib.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 #include "board_link.h"
-#include "host_messaging.h"
 #include "crypto.h"
+#include "host_messaging.h"
 #include "simple_flash.h"
 
 #ifdef POST_BOOT
@@ -53,7 +53,8 @@
 */
 
 // Flash Macros
-#define FLASH_ADDR ((MXC_FLASH_MEM_BASE + MXC_FLASH_MEM_SIZE) - (2 * MXC_FLASH_PAGE_SIZE))
+#define FLASH_ADDR                                                             \
+    ((MXC_FLASH_MEM_BASE + MXC_FLASH_MEM_SIZE) - (2 * MXC_FLASH_PAGE_SIZE))
 #define FLASH_MAGIC 0xDEADBEEF
 
 // Library call return types
@@ -256,8 +257,9 @@ int scan_components() {
 
     // Scan scan command to each component
     for (i2c_addr_t addr = 0x8; addr < 0x78; addr++) {
-        // I2C Blacklist - 0x36 conflicts with separate device on MAX78000FTHR
-        if (addr == 0x36) {
+        // I2C Blacklist:
+        // 0x18, 0x28, and 0x36 conflict with separate devices on MAX78000FTHR
+        if (addr == 0x18 || addr == 0x28 || addr == 0x36) {
             continue;
         }
 
@@ -294,7 +296,7 @@ int validate_components() {
         transmit_buffer[0] = COMPONENT_CMD_VALIDATE;
 
         // Create 16 byte nonce
-        uint8_t* nonce = transmit_buffer + 1;
+        uint8_t *nonce = transmit_buffer + 1;
         trng(nonce, 16);
 
         // Send out command and receive result
@@ -312,8 +314,7 @@ int validate_components() {
         }
 
         // Check that the sig is correct
-        if (verify_sig(nonce, 16, SECRET, sizeof(SECRET), receive_buffer))
-        {
+        if (verify_sig(nonce, 16, SECRET, sizeof(SECRET), receive_buffer)) {
             print_error("Could not validate component (Sig)\n");
             return ERROR_RETURN;
         }
@@ -354,7 +355,8 @@ int boot_components() {
         }
 
         // Print boot message from component
-        print_info("0x%08x>%s\n", flash_status.component_ids[i], receive_buffer);
+        print_info("0x%08x>%s\n", flash_status.component_ids[i],
+                   receive_buffer);
     }
     return SUCCESS_RETURN;
 }
@@ -530,7 +532,7 @@ void attempt_attest() {
     uint32_t component_id;
     recv_input("Component ID: ", buf);
     sscanf(buf, "%x", &component_id);
-    if(attest_component(component_id) == SUCCESS_RETURN) {
+    if (attest_component(component_id) == SUCCESS_RETURN) {
         print_success("Attest\n");
     }
 }
