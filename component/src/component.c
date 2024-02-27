@@ -112,7 +112,7 @@ void secure_send(uint8_t *buffer, uint8_t len) {
     uint8_t *msg = malloc(size_m);
 
     // create signature and place at start of msg
-    create_signature(buffer, len, SECRET, sizeof(SECRET), msg);
+    create_signature(buffer, len, SECRET, msg);
 
     // copy data to msg behind the signature
     memcpy(msg + 16, buffer, len);
@@ -151,7 +151,7 @@ int secure_receive(uint8_t *buffer) {
     int size_d = size_r - 16;
 
     // return error if signature is does not match
-    if (verify_signature(data, size_d, SECRET, sizeof(SECRET), sig))
+    if (verify_signature(data, size_d, SECRET, sig))
         return -1;
 
     // copy the data into message buffer
@@ -243,7 +243,7 @@ void process_boot() {
     if (len != 16)
         return;
 
-    if (verify_signature(transmit_buffer, 16, SECRET, sizeof(SECRET), receive_buffer))
+    if (verify_signature(transmit_buffer, 16, SECRET, receive_buffer))
         return;
 
     len = strlen(COMPONENT_BOOT_MSG) + 1;
@@ -264,7 +264,7 @@ void process_scan() {
 void process_validate() {
     // The AP requested a validation. Respond with the sig from recieved nonce
     uint8_t *nonce = receive_buffer + 1;
-    create_signature(nonce, 16, SECRET, sizeof(SECRET), transmit_buffer);
+    create_signature(nonce, 16, SECRET, transmit_buffer);
     send_packet_and_ack(16, transmit_buffer);
 }
 
