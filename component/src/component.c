@@ -58,7 +58,8 @@ typedef enum {
     COMPONENT_CMD_SCAN,
     COMPONENT_CMD_VALIDATE,
     COMPONENT_CMD_BOOT,
-    COMPONENT_CMD_ATTEST
+    COMPONENT_CMD_ATTEST,
+    COMPONENT_CMD_PIN
 } component_cmd_t;
 
 /******************************** TYPE DEFINITIONS
@@ -152,13 +153,23 @@ int secure_receive(uint8_t *buffer) {
 
     // return error if signature is does not match
     if (verify_signature(data, size_d, SECRET, sig))
-        return -1;
+        return ERROR_RETURN;
 
     // copy the data into message buffer
     memcpy(buffer, data, size_d);
 
     // return size of data
     return size_d;
+}
+
+void send_error() {
+    transmit_buffer[0] = 0x01;
+    send_packet_and_ack(1, transmit_buffer);
+}
+
+void send_success() {
+    transmit_buffer[0] = 0x00;
+    send_packet_and_ack(1, transmit_buffer);
 }
 
 /******************************* FUNCTION DEFINITIONS
@@ -228,10 +239,8 @@ void component_process_cmd() {
     }
 }
 
-void process_boot() {
-    // The AP requested a boot. Set `component_boot` for the main loop and
-    // respond with the boot message
-
+// A function that verifies that the AP has the correct secret
+int send_validate() {
     // Create 16 byte nonce
     trng(transmit_buffer, 16);
 
@@ -239,15 +248,36 @@ void process_boot() {
     send_packet_and_ack(16, transmit_buffer);
 
     // Recieve sig from AP
-    int len = wait_and_receive_packet(receive_buffer);
-    if (len != 16)
+    wait_and_receive_packet(receive_buffer);
+
+    if (verify_signature(transmit_buffer, 16, SECRET, receive_buffer)) {
+        send_error();
+        return ERROR_RETURN;
+    }
+
+    send_success();
+    return SUCCESS_RETURN;
+}
+
+// Responds to a request to verify from an AP
+void recieve_validate() {
+    // Create a signature from the recieved nonce
+    create_signature(receive_buffer + 1, 16, SECRET, transmit_buffer);
+
+    // Send back said signature
+    send_packet_and_ack(16, transmit_buffer);
+}
+
+void process_boot() {
+    // The AP requested a boot
+
+    // AP can't be validated
+    if (send_validate() == ERROR_RETURN)
         return;
 
-    if (verify_signature(transmit_buffer, 16, SECRET, receive_buffer))
-        return;
-
-    len = strlen(COMPONENT_BOOT_MSG) + 1;
-    memcpy((void *)transmit_buffer, COMPONENT_BOOT_MSG, len);
+    // Send component boot message
+    int len = strlen(COMPONENT_BOOT_MSG) + 1;
+    memcpy((void*)transmit_buffer, COMPONENT_BOOT_MSG, len);
     send_packet_and_ack(len, transmit_buffer);
 
     // Call the boot function
@@ -261,14 +291,13 @@ void process_scan() {
     send_packet_and_ack(sizeof(scan_message), transmit_buffer);
 }
 
-void process_validate() {
-    // The AP requested a validation. Respond with the sig from recieved nonce
-    uint8_t *nonce = receive_buffer + 1;
-    create_signature(nonce, 16, SECRET, transmit_buffer);
-    send_packet_and_ack(16, transmit_buffer);
-}
+void process_validate() { recieve_validate(); }
 
 void process_attest() {
+    // Validate the AP before sending attestation data
+    if (send_validate() == ERROR_RETURN)
+        return;
+
     uint8_t attest_str[MAX_I2C_MESSAGE_LEN];
 
     // Format attestation data
@@ -276,19 +305,8 @@ void process_attest() {
                       ATTESTATION_DATE, ATTESTATION_CUSTOMER) +
               1;
 
-    // Calculate padding size
-    int pad = 16 - len % 16;
-    if (pad) {
-        // Pad with zeros
-        memset(transmit_buffer + len, 0, pad);
-
-        // Add padding to total length
-        len += pad;
-    }
-
-    encrypt_sym(attest_str, len, SECRET, transmit_buffer);
-
-    send_packet_and_ack(len, transmit_buffer);
+    // Respond with attestation data
+    send_packet_and_ack(len, attest_str);
 }
 
 /*********************************** MAIN *************************************/

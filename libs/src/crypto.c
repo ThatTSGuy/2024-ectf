@@ -133,13 +133,6 @@ int verify_signature(uint8_t* data, size_t size, uint8_t* secret, uint8_t* signa
     return memcmp(signature, self_signature, 16);
 }
 
-/** @brief Creates a true random number
- *
- * @param buffer A pointer to a buffer to store the number
- * @param size The size of the number in bytes
- *
- * @return 0 on success, and non-zero on failure
- */
 int trng(uint8_t* buffer, size_t size)
 {
     MXC_TRNG_Init();

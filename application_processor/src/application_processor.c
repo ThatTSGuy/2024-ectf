@@ -156,7 +156,7 @@ int secure_receive(i2c_addr_t address, uint8_t *buffer) {
 
     // poll_and_receive_packet returns error or the message is too small
     if (size_r < 16)
-        return -1;
+        return ERROR_RETURN;
 
     // pointer offsets
     uint8_t *sig = recieved;
@@ -167,7 +167,7 @@ int secure_receive(i2c_addr_t address, uint8_t *buffer) {
 
     // return error if signature is does not match
     if (verify_signature(data, size_d, SECRET, sig))
-        return -1;
+        return ERROR_RETURN;
 
     // copy the data into message buffer
     memcpy(buffer, data, size_d);
@@ -242,6 +242,66 @@ int issue_cmd(i2c_addr_t addr, uint8_t *transmit, uint8_t *receive) {
     return len;
 }
 
+int send_validate(i2c_addr_t addr) {
+    // Allocate space for message (1 byte command + 16 byte nonce)
+    // and recieved message (16 byte challenge)
+    uint8_t transmit_buf[17];
+    uint8_t recieve_buf[16];
+
+    // Create command message
+    transmit_buf[0] = COMPONENT_CMD_VALIDATE;
+
+    // Create 16 byte nonce and the ptr to it
+    uint8_t *nonce = transmit_buf + 1;
+    trng(nonce, 16);
+
+    // Send out command
+    int len = send_packet(addr, 17, transmit_buf);
+    if (len == ERROR_RETURN)
+        return ERROR_RETURN;
+
+    // Recieve challenge
+    len = poll_and_receive_packet(addr, recieve_buf);
+    if (len != 16)
+        return ERROR_RETURN;
+
+    // Check that the challenge is correct
+    if (verify_signature(nonce, 16, SECRET, recieve_buf)) {
+        print_error("Challenge mismatch\n");
+        return ERROR_RETURN;
+    }
+
+    return SUCCESS_RETURN;
+}
+
+// Allows the AP to validate itself with a component
+int recieve_validate(i2c_addr_t addr) {
+    uint8_t transmit_buffer[MAX_I2C_MESSAGE_LEN];
+    uint8_t receive_buffer[MAX_I2C_MESSAGE_LEN];
+
+    // Recieve nonce
+    int r = poll_and_receive_packet(addr, receive_buffer);
+    if (r == ERROR_RETURN)
+        return ERROR_RETURN;
+
+    // Create sig (challenge) from recieved 16 byte nonce
+    create_signature(receive_buffer, 16, SECRET, transmit_buffer);
+
+    // Send sig back to component
+    send_packet(addr, 16, transmit_buffer);
+
+    // Recieve result
+    r = poll_and_receive_packet(addr, receive_buffer);
+    if (r == ERROR_RETURN)
+        return ERROR_RETURN;
+
+    // Check to see if the validate succeeded (0x01 = fail)
+    if (*receive_buffer)
+        return ERROR_RETURN;
+
+    return SUCCESS_RETURN;
+}
+
 /******************************** COMPONENT COMMS
  * ********************************/
 
@@ -280,36 +340,6 @@ int scan_components() {
     return SUCCESS_RETURN;
 }
 
-int verify_component(uint8_t addr) {
-    // Allocate space for message (1 byte command + 16 byte nonce)
-    // and recieved message (16 byte challenge)
-    uint8_t transmit_buf[17];
-    uint8_t recieve_buf[16];
-
-    // Create command message
-    transmit_buf[0] = COMPONENT_CMD_VALIDATE;
-
-    // Create 16 byte nonce and the ptr to it
-    uint8_t *nonce = transmit_buf + 1;
-    trng(nonce, 16);
-
-    // Send out command
-    int len = send_packet(addr, 17, transmit_buf);
-    if (len == ERROR_RETURN) return ERROR_RETURN;
-
-    // Recieve challenge
-    len = poll_and_receive_packet(addr, recieve_buf);
-    if (len != 16) return ERROR_RETURN;
-
-    // Check that the challenge is correct
-    if (verify_signature(nonce, 16, SECRET, recieve_buf)) {
-        print_error("Challenge mismatch\n");
-        return ERROR_RETURN;
-    }
-
-    return SUCCESS_RETURN;
-}
-
 int validate_components() {
     // Veryify each component
     for (unsigned i = 0; i < flash_status.component_cnt; i++) {
@@ -318,7 +348,7 @@ int validate_components() {
             component_id_to_i2c_addr(flash_status.component_ids[i]);
 
         // Verify component
-        if (verify_component(addr) == ERROR_RETURN) {
+        if (send_validate(addr) == ERROR_RETURN) {
             print_error("Could not validate component\n");
             return ERROR_RETURN;
         }
@@ -337,26 +367,18 @@ int boot_components() {
         i2c_addr_t addr =
             component_id_to_i2c_addr(flash_status.component_ids[i]);
 
-        // Create command message
+        // Create boot message
         transmit_buffer[0] = COMPONENT_CMD_BOOT;
+        send_packet(addr, 1, transmit_buffer);
 
-        // Send out command and receive result
-        int len = issue_cmd(addr, transmit_buffer, receive_buffer);
-        if (len != 16) {
-            print_error("Could not boot component (send)\n");
+        // AP verify flow
+        if (recieve_validate(addr) == ERROR_RETURN) {
+            print_error("Could not boot component\n");
             return ERROR_RETURN;
         }
 
-        // Create sig (challenge) from recieved 16 byte nonce
-        create_signature(receive_buffer, 16, SECRET, transmit_buffer);
-        send_packet(addr, 16, transmit_buffer);
-
-        // Recieve boot message
-        len = poll_and_receive_packet(addr, receive_buffer);
-        if (len == ERROR_RETURN) {
-            print_error("Could not boot component (recv)\n");
-            return ERROR_RETURN;
-        }
+        // If component has verifed AP, recieve component boot message
+        poll_and_receive_packet(addr, receive_buffer);
 
         // Print boot message from component
         print_info("0x%08x>%s\n", flash_status.component_ids[i],
@@ -373,18 +395,18 @@ int attest_component(uint32_t component_id) {
     // Set the I2C address of the component
     i2c_addr_t addr = component_id_to_i2c_addr(component_id);
 
-    // Create command message
-    command_message *command = (command_message *)transmit_buffer;
-    command->opcode = COMPONENT_CMD_ATTEST;
+    // Create attestaion message
+    transmit_buffer[0] = COMPONENT_CMD_ATTEST;
+    send_packet(addr, 1, transmit_buffer);
 
-    // Send out command and receive result
-    int len = issue_cmd(addr, transmit_buffer, receive_buffer);
-    if (len == ERROR_RETURN) {
+    // Recieve validate message to prove AP is authentic
+    if (recieve_validate(addr) == ERROR_RETURN) {
         print_error("Could not attest component\n");
         return ERROR_RETURN;
     }
 
-    decrypt_sym(receive_buffer, len, SECRET, receive_buffer);
+    // Recieve attestation data
+    poll_and_receive_packet(addr, receive_buffer);
 
     // Print out attestation data
     print_info("C>0x%08x\n", component_id);
