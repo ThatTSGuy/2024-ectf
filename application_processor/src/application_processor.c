@@ -395,6 +395,12 @@ int attest_component(uint32_t component_id) {
     // Set the I2C address of the component
     i2c_addr_t addr = component_id_to_i2c_addr(component_id);
 
+    // First validate component to ensure authenticity
+    if (send_validate(addr) == ERROR_RETURN) {
+        print_error("Could not validate component\n");
+        return ERROR_RETURN;
+    }
+
     // Create attestaion message
     transmit_buffer[0] = COMPONENT_CMD_ATTEST;
     send_packet(addr, 1, transmit_buffer);
@@ -445,34 +451,13 @@ void boot() {
     }
 
     print_info("Application Processor Started\n");
-
-    // Handle commands forever
-    char buf[100];
-    while (1) {
-        recv_input("Enter Command: ", buf);
-
-        // Execute requested command
-        if (!strcmp(buf, "echo")) { // Secure send
-            recv_input("Message: ", buf);
-            secure_send(0x11111124, buf, strlen(buf));
-            int size = secure_receive(0x11111124, buf);
-            print_info("Recieved (size: %i): %s\n\n", size, buf);
-            if (size < 0)
-                continue;
-            print_hex_debug(buf, size);
-        } else if (!strcmp(buf, "secret")) {
-            print_hex_info(SECRET, 16);
-        } else {
-            print_error("Unrecognized command '%s'\n", buf);
-        }
-    }
 #endif
 }
 
 // Compare the entered PIN to the correct PIN
 int validate_pin() {
-    char buf[50];
-    recv_input("Enter pin: ", buf);
+    char buf[7];
+    recv_input("Enter pin: ", buf, 7);
     if (!strcmp(buf, AP_PIN)) {
         print_debug("Pin Accepted!\n");
         return SUCCESS_RETURN;
@@ -483,8 +468,8 @@ int validate_pin() {
 
 // Function to validate the replacement token
 int validate_token() {
-    char buf[50];
-    recv_input("Enter token: ", buf);
+    char buf[17];
+    recv_input("Enter token: ", buf, 17);
     if (!strcmp(buf, AP_TOKEN)) {
         print_debug("Token Accepted!\n");
         return SUCCESS_RETURN;
@@ -514,7 +499,7 @@ void attempt_boot() {
 
 // Replace a component if the PIN is correct
 void attempt_replace() {
-    char buf[50];
+    char buf[11];
 
     if (validate_token()) {
         return;
@@ -523,9 +508,9 @@ void attempt_replace() {
     uint32_t component_id_in = 0;
     uint32_t component_id_out = 0;
 
-    recv_input("Component ID In: ", buf);
+    recv_input("Component ID In: ", buf, 11);
     sscanf(buf, "%x", &component_id_in);
-    recv_input("Component ID Out: ", buf);
+    recv_input("Component ID Out: ", buf, 11);
     sscanf(buf, "%x", &component_id_out);
 
     // Find the component to swap out
@@ -552,13 +537,13 @@ void attempt_replace() {
 
 // Attest a component if the PIN is correct
 void attempt_attest() {
-    char buf[50];
+    char buf[11];
 
     if (validate_pin()) {
         return;
     }
     uint32_t component_id;
-    recv_input("Component ID: ", buf);
+    recv_input("Component ID: ", buf, 11);
     sscanf(buf, "%x", &component_id);
     if (attest_component(component_id) == SUCCESS_RETURN) {
         print_success("Attest\n");
@@ -576,9 +561,12 @@ int main() {
     print_info("Application Processor Started\n");
 
     // Handle commands forever
-    char buf[100];
+    char buf[9];
     while (1) {
-        recv_input("Enter Command: ", buf);
+        recv_input("Enter Command: ", buf, 9);
+
+        // Strip newline
+        buf[strcspn(buf, "\n")] = '\0';
 
         // Execute requested command
         if (!strcmp(buf, "list")) {
@@ -589,15 +577,6 @@ int main() {
             attempt_replace();
         } else if (!strcmp(buf, "attest")) {
             attempt_attest();
-        } else if (!strcmp(buf, "random")) {
-            recv_input("Size: ", buf);
-            int size = buf[0] - 0x30;
-
-            uint8_t *buf = malloc(size);
-
-            trng(buf, size);
-
-            print_hex_info(buf, size);
         } else {
             print_error("Unrecognized command '%s'\n", buf);
         }
