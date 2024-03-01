@@ -8,4 +8,4 @@ for x in range(16):
 
 hex_str = ", ".join(nums)
 
-print("uint8_t SECRET[] = { " + hex_str + "};", file=sys.stdout)
+print("uint8_t SECRET[] = { " + hex_str + " };", file=sys.stdout)
